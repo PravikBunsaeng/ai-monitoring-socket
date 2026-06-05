@@ -1,0 +1,20 @@
+{
+  "name": "ai-online-test-realtime",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Socket.IO proctoring server for UTHM AI Online Test System",
+  "main": "socket-server.js",
+  "scripts": {
+    "start": "node socket-server.js",
+    "dev": "node socket-server.js"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "dependencies": {
+    "cors": "^2.8.5",
+    "express": "^4.21.2",
+    "mysql2": "^3.11.5",
+    "socket.io": "^4.7.5"
+  }
+}
