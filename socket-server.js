@@ -16,12 +16,21 @@ const persist = require('./lib/persistence');
 const db = require('./lib/db');
 
 const app = express();
-app.use(cors({ origin: config.corsOrigin, credentials: true }));
+app.use(cors({
+  origin: '*',
+  methods: ['GET', 'POST'],
+  credentials: false
+}));
 app.get('/health', (_req, res) => res.json({ ok: true, service: 'proctoring-socket', ts: Date.now() }));
 
 const server = http.createServer(app);
 const io = new Server(server, {
-  cors: { origin: config.corsOrigin, methods: ['GET', 'POST'], credentials: true },
+  cors: {
+    origin: '*',
+    methods: ['GET', 'POST'],
+    credentials: false
+  },
+  transports: ['websocket', 'polling'],
   pingInterval: 20000,
   pingTimeout: 25000,
   maxHttpBufferSize: 1e6
