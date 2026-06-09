@@ -140,8 +140,10 @@ window.LiveMonitorApp = (function () {
                 return;
             }
             this.socket = io(this.config.socketUrl, {
-                transports: ['websocket', 'polling'],
-                reconnection: true
+                transports: ['websocket'],
+                upgrade: false,
+                reconnection: true,
+                timeout: 20000
             });
 
             this.socket.on('connect_error', (err) => {
