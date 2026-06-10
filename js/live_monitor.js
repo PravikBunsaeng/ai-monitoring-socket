@@ -66,6 +66,7 @@ window.LiveMonitorApp = (function () {
             this._joinActivityDedupe = new Map();
             /** @type {Set<string>} */
             this._chatLineKeys = new Set();
+            this.chatHistory = new Map();
         }
 
         init() {
@@ -904,6 +905,8 @@ window.LiveMonitorApp = (function () {
             const modal = bootstrap.Modal.getOrCreateInstance(this.dom.chatModal);
             modal.show();
             await this._loadChat(mid);
+            const saved = this.chatHistory.get(mid) || [];
+            saved.forEach((m) => this._renderChatLine(m));
             this.socket?.emit('watch_monitoring', { monitoring_id: mid });
         }
 
@@ -957,6 +960,17 @@ window.LiveMonitorApp = (function () {
         _handleIncomingChat(p) {
             const mid = Number(p.monitoring_id);
             if (!mid) return;
+            if (!this.chatHistory.has(mid)) {
+                this.chatHistory.set(mid, []);
+            }
+            this.chatHistory.get(mid).push({
+                sender_role: p.sender_role,
+                message_body: p.message,
+                created_at: p.created_at,
+                event_type: p.event_type,
+                monitoring_id: mid
+            });
+            
             if (p.sender_role === 'lecturer') {
                 if (this.dom.chatModal?.dataset.mid === String(mid)) {
                     this._renderChatLine({
