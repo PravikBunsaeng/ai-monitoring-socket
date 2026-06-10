@@ -704,19 +704,20 @@ const { student_id: studentId, test_id: testId } = rows[0];
     }
 
     if (sess.role === 'student' && mid === sess.monitoring_id) {
-      const rows = await db.query(
-        `SELECT t.test_id FROM ai_monitoring am INNER JOIN tests t ON t.test_id = am.test_id WHERE am.monitoring_id = ? LIMIT 1`,
-        [mid]
-      );
-      const testId = rows[0]?.test_id || sess.test_id;
-      await persist.logChatMessage(mid, testId, sess.student_id, '', 'student', body);
       emitToLecturers('private_message', {
         monitoring_id: mid,
         student_id: sess.student_id,
         sender_role: 'student',
         message: body,
+        message_id: data.message_id || `stu-${mid}-${Date.now()}`,
         created_at: new Date().toISOString()
       });
+      
+      socket.emit('private_message_sent', {
+        monitoring_id: mid,
+        message: body
+      });
+      return;
     }
   });
 
