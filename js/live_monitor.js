@@ -901,57 +901,49 @@ window.LiveMonitorApp = (function () {
 
         async _openChat(mid) {
             if (!this.dom.chatModal) return;
-            
             this.dom.chatModal.dataset.mid = String(mid);
+            
             if (this.dom.chatMessages) {
                 this.dom.chatMessages.textContent = '';
                 this._chatLineKeys.clear();
             }
-            
             await this._loadChat(mid);
-            const memoryMessages = this.chatHistory.get(mid) || [];
-            memoryMessages.forEach((m) => this._renderChatLine(m));
+            const history = this.chatHistory.get(mid) || [];
+            if (history.length) {
+                history.forEach((m) => this._renderChatLine(m));
+            } else {
+                this.dom.chatMessages.innerHTML = '<div class="empty-note">No messages yet.</div>';
+            }
             const modal = bootstrap.Modal.getOrCreateInstance(this.dom.chatModal);
             modal.show();
             this.socket?.emit('watch_monitoring', { monitoring_id: mid });
         }
 
         async _loadChat(mid) {
-            if (!this.dom.chatMessages) return;
             try {
-                const res = await fetch(`get_chat_messages.php?monitoring_id=${encodeURIComponent(mid)}`);
+                const res = await fetch(`get_chat_messages.php?monitoring_id=${encodeURIComponent(mid)}`, {
+                    credentials: 'same-origin'
+                });
                 const data = await res.json();
-                if (data.ok && Array.isArray(data.messages)) {
-                    const existing = this.chatHistory.get(mid) || [];
-                    this.chatHistory.set(mid, [...data.messages, ...existing]);
-                }
-                this.dom.chatMessages.textContent = '';
-                this._chatLineKeys.clear();
+                if (!data.ok || !Array.isArray(data.messages)) return;
+                const oldHistory = this.chatHistory.get(mid) || [];
+                const merged = [...oldHistory];
                 
-                if (!data.ok) {
-                    return;
-                }
-                
-                if (Array.isArray(data.messages)) {
-                    this.chatHistory.set(mid, data.messages);
-                    
-                    if (data.messages.length === 0) {
-                        this.dom.chatMessages.innerHTML =
-                            '<div class="empty-note">No messages yet.</div>';
-                        return;
+                data.messages.forEach((msg) => {
+                    const exists = merged.some((m) =>
+                        String(m.message_body || m.message || '') === String(msg.message_body || msg.message || '') &&
+                        String(m.sender_role || '') === String(msg.sender_role || '') &&
+                        String(m.created_at || '') === String(msg.created_at || '')
+                    );
+                    if (!exists) {
+                        merged.push(msg);
                     }
-                    
-                    data.messages.forEach((m) => {
-                        this._renderChatLine(m);
-                    });
-                }
-                data.messages.forEach((m) => this._renderChatLine(m));
-                this.dom.chatMessages.scrollTop = this.dom.chatMessages.scrollHeight;
+                });
+                this.chatHistory.set(mid, merged);
             } catch (err) {
-                this.dom.chatMessages.textContent = err.message;
+                console.error('[LiveMonitor] load chat', err);
             }
         }
-
         _chatLineKey(m) {
             const mid = Number(m.monitoring_id) || 0;
             const role = String(m.sender_role || '');
@@ -992,36 +984,35 @@ window.LiveMonitorApp = (function () {
                 monitoring_id: mid,
                 student_id: p.student_id || ''
             };
-            
             if (!msg.message_body.trim()) return;
-            
-            if (!this.chatHistory.has(mid)) {
-                this.chatHistory.set(mid, []);
+            const history = this.chatHistory.get(mid) || [];
+            const exists = history.some((m) =>
+                String(m.message_body || m.message || '') === msg.message_body &&
+                String(m.sender_role || '') === msg.sender_role &&
+                String(m.created_at || '') === msg.created_at
+                );
+            if (!exists) {
+                history.push(msg);
+                this.chatHistory.set(mid, history);
             }
-            
-            this.chatHistory.get(mid).push(msg);
             const fd = new FormData();
             fd.append('monitoring_id', String(mid));
             fd.append('sender_role', msg.sender_role);
             fd.append('message', msg.message_body);
-            
             fetch('save_chat_message.php', {
                 method: 'POST',
                 body: fd,
                 credentials: 'same-origin'
             }).catch(() => {});
-            
             if (msg.sender_role === 'student') {
                 const count = (this.unreadChat.get(mid) || 0) + 1;
                 this.unreadChat.set(mid, count);
-                
                 const badge = this.tiles.get(mid)?.querySelector('.chat-badge');
                 if (badge) {
                     badge.hidden = false;
                     badge.textContent = String(count);
                 }
             }
-            
             if (this.dom.chatModal?.dataset.mid === String(mid)) {
                 this._renderChatLine(msg);
             } else {
