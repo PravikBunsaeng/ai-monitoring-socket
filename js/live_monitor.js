@@ -978,22 +978,16 @@ window.LiveMonitorApp = (function () {
                 event_type: p.event_type,
                 monitoring_id: mid
             });
-            const key = 'lecturer_chat_' + mid;
-            const old =
-                JSON.parse(
-                    localStorage.getItem(key) || '[]'
-                );
-            old.push({
-                sender_role: p.sender_role,
-                message_body: p.message,
-                created_at: p.created_at,
-                event_type: p.event_type,
-                monitoring_id: mid
-            });
-            localStorage.setItem(
-                key,
-                JSON.stringify(old)
-            );
+            const fd = new FormData();
+            fd.append('monitoring_id', String(mid));
+            fd.append('sender_role', p.sender_role || 'student');
+            fd.append('message', p.message || '');
+            
+            fetch('save_chat_message.php', {
+                method: 'POST',
+                body: fd,
+                credentials: 'same-origin'
+            }).catch(() => {});
             
             if (p.sender_role === 'lecturer') {
                 if (this.dom.chatModal?.dataset.mid === String(mid)) {
@@ -1046,23 +1040,16 @@ window.LiveMonitorApp = (function () {
                 created_at: new Date().toISOString(),
                 monitoring_id: mid
             });
-            const key = 'lecturer_chat_' + mid;
+            const fd = new FormData();
+            fd.append('monitoring_id', String(mid));
+            fd.append('sender_role', 'lecturer');
+            fd.append('message', text);
             
-            const old =
-                JSON.parse(
-                    localStorage.getItem(key) || '[]'
-                );
-            old.push({
-                sender_role: 'lecturer',
-                message_body: text,
-                created_at: new Date().toISOString(),
-                monitoring_id: mid
-            });
-            
-            localStorage.setItem(
-                key,
-                JSON.stringify(old)
-            );
+            fetch('save_chat_message.php', {
+                method: 'POST',
+                body: fd,
+                credentials: 'same-origin'
+            }).catch(() => {});
             if (this.dom.chatInput) this.dom.chatInput.value = '';
         }
 
