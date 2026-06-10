@@ -901,18 +901,19 @@ window.LiveMonitorApp = (function () {
 
         async _openChat(mid) {
             if (!this.dom.chatModal) return;
+            
             this.dom.chatModal.dataset.mid = String(mid);
+            if (this.dom.chatMessages) {
+                this.dom.chatMessages.textContent = '';
+                this._chatLineKeys.clear();
+            }
+            
+            await this._loadChat(mid);
+            const memoryMessages = this.chatHistory.get(mid) || [];
+            memoryMessages.forEach((m) => this._renderChatLine(m));
             const modal = bootstrap.Modal.getOrCreateInstance(this.dom.chatModal);
             modal.show();
-            await this._loadChat(mid);
-            const history = this.chatHistory.get(mid) || [];
-            history.forEach((m) => {
-                this._renderChatLine(m);
-            });
-            
-            this.socket?.emit('watch_monitoring', {
-                monitoring_id: mid
-            });
+            this.socket?.emit('watch_monitoring', { monitoring_id: mid });
         }
 
         async _loadChat(mid) {
@@ -920,6 +921,10 @@ window.LiveMonitorApp = (function () {
             try {
                 const res = await fetch(`get_chat_messages.php?monitoring_id=${encodeURIComponent(mid)}`);
                 const data = await res.json();
+                if (data.ok && Array.isArray(data.messages)) {
+                    const existing = this.chatHistory.get(mid) || [];
+                    this.chatHistory.set(mid, [...data.messages, ...existing]);
+                }
                 this.dom.chatMessages.textContent = '';
                 this._chatLineKeys.clear();
                 
@@ -979,22 +984,26 @@ window.LiveMonitorApp = (function () {
         _handleIncomingChat(p) {
             const mid = Number(p.monitoring_id);
             if (!mid) return;
+            const msg = {
+                sender_role: p.sender_role || 'student',
+                message_body: p.message || p.message_body || '',
+                created_at: p.created_at || new Date().toISOString(),
+                event_type: p.event_type,
+                monitoring_id: mid,
+                student_id: p.student_id || ''
+            };
+            
+            if (!msg.message_body.trim()) return;
+            
             if (!this.chatHistory.has(mid)) {
                 this.chatHistory.set(mid, []);
             }
-            const history = this.chatHistory.get(mid);
-            history.push({
-                sender_role: p.sender_role,
-                message_body: p.message,
-                created_at: p.created_at || new Date().toISOString(),
-                event_type: p.event_type,
-                monitoring_id: mid
-            });
-            this.chatHistory.set(mid, history);
+            
+            this.chatHistory.get(mid).push(msg);
             const fd = new FormData();
             fd.append('monitoring_id', String(mid));
-            fd.append('sender_role', p.sender_role || 'student');
-            fd.append('message', p.message || '');
+            fd.append('sender_role', msg.sender_role);
+            fd.append('message', msg.message_body);
             
             fetch('save_chat_message.php', {
                 method: 'POST',
@@ -1002,45 +1011,29 @@ window.LiveMonitorApp = (function () {
                 credentials: 'same-origin'
             }).catch(() => {});
             
-            if (p.sender_role === 'lecturer') {
-                if (this.dom.chatModal?.dataset.mid === String(mid)) {
-                    this._renderChatLine({
-                        sender_role: 'lecturer',
-                        message_body: p.message,
-                        created_at: p.created_at,
-                        monitoring_id: mid
-                    });
-                }
-                return;
-            }
-            if (p.sender_role === 'student') {
+            if (msg.sender_role === 'student') {
                 const count = (this.unreadChat.get(mid) || 0) + 1;
                 this.unreadChat.set(mid, count);
+                
                 const badge = this.tiles.get(mid)?.querySelector('.chat-badge');
                 if (badge) {
                     badge.hidden = false;
                     badge.textContent = String(count);
                 }
             }
+            
             if (this.dom.chatModal?.dataset.mid === String(mid)) {
-                this._renderChatLine({
-                    sender_role: p.sender_role,
-                    message_body: p.message,
-                    created_at: p.created_at,
-                    event_type: p.event_type,
-                    monitoring_id: mid
-                });
+                this._renderChatLine(msg);
             } else {
                 this._appendActivity({
                     monitoring_id: mid,
-                    student_id: p.student_id,
+                    student_id: msg.student_id,
                     activity_type: 'CHAT_STUDENT',
-                    activity_value: `Message: ${String(p.message || '').slice(0, 80)}`,
-                    timestamp: p.created_at
+                    activity_value: `Message: ${msg.message_body.slice(0, 80)}`,
+                    timestamp: msg.created_at
                 });
             }
         }
-
         _sendChat() {
             const mid = Number(this.dom.chatModal?.dataset.mid);
             const text = this.dom.chatInput?.value?.trim();
