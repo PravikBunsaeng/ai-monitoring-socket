@@ -905,17 +905,14 @@ window.LiveMonitorApp = (function () {
             const modal = bootstrap.Modal.getOrCreateInstance(this.dom.chatModal);
             modal.show();
             await this._loadChat(mid);
-            const saved =
-                JSON.parse(
-                    localStorage.getItem(
-                        'lecturer_chat_' + mid
-                    ) || '[]'
-                );
+            const history = this.chatHistory.get(mid) || [];
+            history.forEach((m) => {
+                this._renderChatLine(m);
+            });
             
-            saved.forEach((m) =>
-                this._renderChatLine(m)
-                );
-            this.socket?.emit('watch_monitoring', { monitoring_id: mid });
+            this.socket?.emit('watch_monitoring', {
+                monitoring_id: mid
+            });
         }
 
         async _loadChat(mid) {
@@ -925,9 +922,23 @@ window.LiveMonitorApp = (function () {
                 const data = await res.json();
                 this.dom.chatMessages.textContent = '';
                 this._chatLineKeys.clear();
-                if (!data.ok || !data.messages?.length) {
-                    this.dom.chatMessages.innerHTML = '<div class="empty-note">No messages yet.</div>';
+                
+                if (!data.ok) {
                     return;
+                }
+                
+                if (Array.isArray(data.messages)) {
+                    this.chatHistory.set(mid, data.messages);
+                    
+                    if (data.messages.length === 0) {
+                        this.dom.chatMessages.innerHTML =
+                            '<div class="empty-note">No messages yet.</div>';
+                        return;
+                    }
+                    
+                    data.messages.forEach((m) => {
+                        this._renderChatLine(m);
+                    });
                 }
                 data.messages.forEach((m) => this._renderChatLine(m));
                 this.dom.chatMessages.scrollTop = this.dom.chatMessages.scrollHeight;
@@ -971,13 +982,15 @@ window.LiveMonitorApp = (function () {
             if (!this.chatHistory.has(mid)) {
                 this.chatHistory.set(mid, []);
             }
-            this.chatHistory.get(mid).push({
+            const history = this.chatHistory.get(mid);
+            history.push({
                 sender_role: p.sender_role,
                 message_body: p.message,
-                created_at: p.created_at,
+                created_at: p.created_at || new Date().toISOString(),
                 event_type: p.event_type,
                 monitoring_id: mid
             });
+            this.chatHistory.set(mid, history);
             const fd = new FormData();
             fd.append('monitoring_id', String(mid));
             fd.append('sender_role', p.sender_role || 'student');
