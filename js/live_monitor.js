@@ -79,7 +79,7 @@ window.LiveMonitorApp = (function () {
             this._bootstrapTimer = setInterval(() => {
                 this.bootstrapStudents();
                 this.loadAttendance();
-            }, 6000);
+            }, 20000);
             this._healthTimer = setInterval(() => this._healthCheck(), 15000);
             this._streamReadyRequested = false;
             this._statsTimer = setInterval(() => this._updateStats(), 3000);
@@ -269,8 +269,9 @@ window.LiveMonitorApp = (function () {
                         is_online: existing.is_online ?? false
                     });
                     this._ensureTile(mid);
-                    if (this.socket?.connected && mid) {
+                    if (this.socket?.connected && mid && !existing._watching) {
                         this.socket.emit('watch_monitoring', { monitoring_id: mid });
+                        existing._watching = true;
                     }
                 });
                 this.students.forEach((s, mid) => {
@@ -508,9 +509,16 @@ window.LiveMonitorApp = (function () {
             this.students.set(mid, s);
             this._ensureTile(mid);
             if (p.socket_id) {
-                this.webrtc.registerStudentSocket(mid, p.socket_id);
-                this.socket.emit('watch_monitoring', { monitoring_id: mid });
                 const sid = p.socket_id;
+                if (s._socket_id === sid) {
+                    return;
+                }
+                s._socket_id = sid;
+                
+                this.webrtc.registerStudentSocket(mid, sid);
+                this.socket.emit('watch_monitoring', {
+                    monitoring_id: mid
+                });
                 setTimeout(() => {
                     this.webrtc.negotiateMonitor(mid, sid, true);
                 }, 500);
@@ -769,7 +777,11 @@ window.LiveMonitorApp = (function () {
             this.students.forEach((s, mid) => {
                 if (s.is_online && s.socket_id) {
                     const pc = this.webrtc.getMonitorPc(mid);
-                    if (!pc || ['failed', 'closed'].includes(pc.connectionState)) {
+                    if (!pc) {
+                        return;
+                    }
+                    
+                    if (['failed', 'closed'].includes(pc.connectionState)) {
                         this.webrtc.negotiateMonitor(mid, s.socket_id, false);
                     }
                 }
