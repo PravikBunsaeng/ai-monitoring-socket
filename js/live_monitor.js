@@ -905,8 +905,16 @@ window.LiveMonitorApp = (function () {
             const modal = bootstrap.Modal.getOrCreateInstance(this.dom.chatModal);
             modal.show();
             await this._loadChat(mid);
-            const saved = this.chatHistory.get(mid) || [];
-            saved.forEach((m) => this._renderChatLine(m));
+            const saved =
+                JSON.parse(
+                    localStorage.getItem(
+                        'lecturer_chat_' + mid
+                    ) || '[]'
+                );
+            
+            saved.forEach((m) =>
+                this._renderChatLine(m)
+                );
             this.socket?.emit('watch_monitoring', { monitoring_id: mid });
         }
 
@@ -970,6 +978,22 @@ window.LiveMonitorApp = (function () {
                 event_type: p.event_type,
                 monitoring_id: mid
             });
+            const key = 'lecturer_chat_' + mid;
+            const old =
+                JSON.parse(
+                    localStorage.getItem(key) || '[]'
+                );
+            old.push({
+                sender_role: p.sender_role,
+                message_body: p.message,
+                created_at: p.created_at,
+                event_type: p.event_type,
+                monitoring_id: mid
+            });
+            localStorage.setItem(
+                key,
+                JSON.stringify(old)
+            );
             
             if (p.sender_role === 'lecturer') {
                 if (this.dom.chatModal?.dataset.mid === String(mid)) {
@@ -1022,6 +1046,23 @@ window.LiveMonitorApp = (function () {
                 created_at: new Date().toISOString(),
                 monitoring_id: mid
             });
+            const key = 'lecturer_chat_' + mid;
+            
+            const old =
+                JSON.parse(
+                    localStorage.getItem(key) || '[]'
+                );
+            old.push({
+                sender_role: 'lecturer',
+                message_body: text,
+                created_at: new Date().toISOString(),
+                monitoring_id: mid
+            });
+            
+            localStorage.setItem(
+                key,
+                JSON.stringify(old)
+            );
             if (this.dom.chatInput) this.dom.chatInput.value = '';
         }
 
